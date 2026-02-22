@@ -1,0 +1,59 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input AuthInput {
+  """register password at least 6"""
+  password: String!
+
+  """phobe number for register"""
+  phone: String!
+}
+
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  user: UserModel!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Mutation {
+  """Authenticate user and return access and refresh tokens"""
+  login(data: AuthInput!): AuthPayload!
+
+  """Logout user and invalidate the current refresh token"""
+  logout(rt: RefreshTokenInput!): Boolean!
+
+  """Renew access token using a valid refresh token"""
+  refresh(rt: RefreshTokenInput!): RefreshPayload!
+
+  """Register a new user with phone and password"""
+  register(data: AuthInput!): AuthPayload!
+}
+
+type Query {
+  """Health check query"""
+  hello: String!
+}
+
+type RefreshPayload {
+  accessToken: String!
+  refreshToken: String!
+}
+
+input RefreshTokenInput {
+  refreshToken: String!
+}
+
+type UserModel {
+  createdAt: DateTime!
+  id: String!
+  name: String!
+  phone: String!
+  role: String!
+  updatedAt: DateTime!
+}

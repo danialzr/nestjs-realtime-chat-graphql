@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum RoomType {
+  DIRECT
+  GROUP
+}
+
+enum GroupRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
+// --- Models ---
+
+model User{
+  id           String   @id @default(uuid())
+
+  phone        String   @unique
+  password     String
+  name         String  
+  avatar       String?
+  bio          String? 
+  role         Role     @default(USER)
+
+  // Relations
+  refreshToken RefreshToken[]
+  messages     Message[]
+  rooms        RoomMember[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt 
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+
+  token     String   
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime 
+  createdAt DateTime @default(now())
+}
+
+model Room {
+  id        String   @id @default(uuid())
+
+  name      String?
+  type      RoomType     @default(DIRECT)
+
+  // Relations
+  members   RoomMember[]
+  messages  Message[]
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model RoomMember {
+  id        String    @id @default(uuid())
+
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  
+  roomId    String
+  room      Room      @relation(fields: [roomId], references: [id])
+  
+  role      GroupRole @default(MEMBER) 
+
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, roomId]) 
+}
+
+model Message {
+  id        String    @id @default(uuid())
+  
+  content   String
+
+  senderId  String
+  sender    User      @relation(fields: [senderId], references: [id])
+
+  roomId    String
+  room      Room      @relation(fields: [roomId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+
+  

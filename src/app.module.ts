@@ -12,6 +12,7 @@ import { GqlAuthGuard } from './modules/auth/guards/gql-auth.guard';
 import { ConfigModule } from '@nestjs/config';
 import { CaslModule } from './casl/casl.module';
 import { AbilitiesGuard } from './casl/guards/abilities.guard';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
@@ -27,7 +28,8 @@ import { AbilitiesGuard } from './casl/guards/abilities.guard';
     CaslModule,
     //Import Modules
     UserModule,
-    AuthModule
+    AuthModule,
+    UploadModule
   ],
   controllers: [AppController],
   providers: [

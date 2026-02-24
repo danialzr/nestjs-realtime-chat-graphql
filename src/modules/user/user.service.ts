@@ -35,10 +35,29 @@ export class UserService {
   }
 
   async updateProfile(id: string, data: Prisma.UserUpdateInput): Promise<User> {
-    return await this.prisma.user.update({
-      where: { id },
-      data
-    })
+    if (data.phone) {
+      const phoneString = data.phone as string;
+
+      const existingUser = await this.findByPhone(phoneString);
+
+      if (existingUser && existingUser.id !== id) {
+        throw new BadRequestException('you cant use this phone number');
+      }
+    }
+
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new BadRequestException('this data used befor you');
+        }
+      }
+      throw error;
+    }
   }
 
   async changePassword(id: string, oldPass: string, newPass: string): Promise<boolean> {
@@ -59,16 +78,21 @@ export class UserService {
   }
 
   async searchUsers(query: string): Promise<any[]> {
-    if (!query || query.trim() === '') return [];
+    const cleanQuery = query.trim();
 
-    return await this.prisma.user.findMany({
+    if (cleanQuery.length < 2) return [];
+
+    return this.prisma.user.findMany({
       where: {
         OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { phone: { contains: query } }
+          { name: { contains: cleanQuery, mode: 'insensitive' } },
+          { phone: { contains: cleanQuery } }
         ],
       },
       take: 20,
+      orderBy: {
+        createdAt: 'desc'
+      },
       select: {
         id: true,
         name: true,
@@ -78,7 +102,7 @@ export class UserService {
         role: true,
         createdAt: true,
       }
-    })
+    });
   }
 
   async changeRole(targetId: string, newRole: Role): Promise<User> {
@@ -87,7 +111,7 @@ export class UserService {
     })
     if (!user) throw new NotFoundException('User not found');
 
-    if (user.role === 'SUPER_ADMIN') throw new ForbiddenException('Cant change this user rol');
+    if (user.role === 'SUPER_ADMIN') throw new ForbiddenException('Cant change this user role');
 
     return await this.prisma.user.update({
       where: { id: targetId },

@@ -11,6 +11,12 @@ export class UserModel {
   @Field()
   name: string;
 
+  @Field({ nullable: true })
+  avatar?: string;
+
+  @Field({ nullable: true })
+  bio?: string;
+
   @Field()
   role: string;
 

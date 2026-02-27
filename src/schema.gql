@@ -24,9 +24,22 @@ input ChangePasswordInput {
   oldPass: String!
 }
 
+input ChangeRoleInput {
+  newRole: GroupRole!
+  roomId: String!
+  targetId: String!
+}
+
 input ChangeUserRoleInput {
   newRole: Role!
   targetId: String!
+}
+
+input CreateRoomInput {
+  avatar: String
+  bio: String
+  name: String!
+  participantIds: [String!]!
 }
 
 """
@@ -34,7 +47,25 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
+enum GroupRole {
+  ADMIN
+  MEMBER
+  OWNER
+}
+
+input JoinBySlugInput {
+  slug: String!
+}
+
+input MemberInput {
+  roomId: String!
+  userId: String!
+}
+
 type Mutation {
+  addMember(input: MemberInput!): RoomModel!
+  changeMemberRole(input: ChangeRoleInput!): RoomModel!
+
   """
   Allows authenticated users to change their account password after validating the old one.
   """
@@ -42,11 +73,15 @@ type Mutation {
 
   """Admin only: Changes a specific user role"""
   changeUserRole(input: ChangeUserRoleInput!): UserModel!
+  createRoom(createRoomInput: CreateRoomInput!): RoomModel!
+  deleteRoom(input: RoomIdInput!): Boolean!
 
   """
   Permits a user to delete their own account or an Admin to remove a specific user.
   """
   deleteUser(id: String!): Boolean!
+  joinBySlug(input: JoinBySlugInput!): RoomModel!
+  leaveRoom(input: RoomIdInput!): Boolean!
 
   """Authenticate user and return access and refresh tokens"""
   login(data: AuthInput!): AuthPayload!
@@ -59,14 +94,24 @@ type Mutation {
 
   """Register a new user with phone and password"""
   register(data: AuthInput!): AuthPayload!
+  removeMember(input: MemberInput!): RoomModel!
+  updateRoom(input: UpdateRoomInput!): RoomModel!
 
   """Updates current user profile"""
   updateUserProfile(data: UpdateProfileInput!): UserModel!
 }
 
+input PaginationInput {
+  limit: Float = 50
+  offset: Float = 0
+}
+
 type Query {
+  getAllRooms(data: PaginationInput!): [RoomModel!]!
+
   """get user"""
   getMe: UserModel
+  getMyRooms: [RoomModel!]!
 
   """Health check query"""
   hello: String!
@@ -92,6 +137,41 @@ enum Role {
   USER
 }
 
+type RoomCount {
+  members: Int!
+  messages: Int!
+}
+
+input RoomIdInput {
+  roomId: String!
+}
+
+type RoomMemberModel {
+  createdAt: DateTime!
+  id: String!
+  role: GroupRole!
+  roomId: String!
+  user: UserModel!
+  userId: String!
+}
+
+type RoomModel {
+  _count: RoomCount
+  avatar: String
+  bio: String
+  createdAt: DateTime!
+  id: String!
+  members: [RoomMemberModel!]!
+  name: String
+  type: RoomType!
+  updatedAt: DateTime!
+}
+
+enum RoomType {
+  DIRECT
+  GROUP
+}
+
 input SearchUsersInput {
   query: String!
 }
@@ -109,6 +189,14 @@ input UpdateProfileInput {
   """phobe number for update"""
   phone: String
   role: Role!
+}
+
+input UpdateRoomInput {
+  avatar: String
+  bio: String
+  name: String
+  roomId: String!
+  slug: String
 }
 
 type UserModel {

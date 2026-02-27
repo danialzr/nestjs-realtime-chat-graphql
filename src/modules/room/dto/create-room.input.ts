@@ -1,5 +1,5 @@
 import { Field, InputType } from "@nestjs/graphql";
-import { IsOptional, IsString, Length } from "class-validator";
+import { ArrayMinSize, IsOptional, IsString, IsUUID, Length } from "class-validator";
 
 @InputType()
 export class CreateRoomInput {
@@ -7,7 +7,7 @@ export class CreateRoomInput {
     @IsOptional()
     @IsString()
     @Length(3, 50)
-    name: string;
+    name?: string;
 
     @Field({ nullable: true })
     @IsOptional()
@@ -20,5 +20,7 @@ export class CreateRoomInput {
     avatar?: string;
 
     @Field(() => [String])
+    @ArrayMinSize(1) 
+    @IsUUID("4", { each: true })
     participantIds: string[];
 }

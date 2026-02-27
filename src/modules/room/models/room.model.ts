@@ -27,6 +27,9 @@ export class RoomModel {
     @Field({ nullable: true })
     avatar?: string;
 
+    @Field({ nullable: true })
+    slug?: string;
+
     @Field(() => RoomType)
     type: RoomType;
 

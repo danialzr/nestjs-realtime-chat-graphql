@@ -163,6 +163,7 @@ type RoomModel {
   id: String!
   members: [RoomMemberModel!]!
   name: String
+  slug: String
   type: RoomType!
   updatedAt: DateTime!
 }

@@ -14,6 +14,7 @@ import { CaslModule } from './casl/casl.module';
 import { AbilitiesGuard } from './casl/guards/abilities.guard';
 import { UploadModule } from './upload/upload.module';
 import { RoomModule } from './modules/room/room.module';
+import { MessageModule } from './modules/message/message.module';
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { RoomModule } from './modules/room/room.module';
     UserModule,
     AuthModule,
     UploadModule,
-    RoomModule
+    RoomModule,
+    MessageModule
   ],
   controllers: [AppController],
   providers: [

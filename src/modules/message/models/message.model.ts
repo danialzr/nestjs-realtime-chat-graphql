@@ -1,4 +1,5 @@
 import { Field, ObjectType } from "@nestjs/graphql";
+import { RoomModel } from "src/modules/room/models/room.model";
 import { UserModel } from "src/modules/user/models/user.model";
 
 @ObjectType()
@@ -17,6 +18,9 @@ export class MessageModel {
 
     @Field()
     roomId: string;
+
+    @Field(() => RoomModel)
+    room?: RoomModel;
 
     @Field()
     createdAt: Date;

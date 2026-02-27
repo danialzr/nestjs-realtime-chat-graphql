@@ -4,6 +4,7 @@ import { Subjects } from "./types/subject.types";
 import { Injectable } from "@nestjs/common";
 import { UserModel } from "src/modules/user/models/user.model";
 import { Role } from "@prisma/client";
+import { RoomModel } from "src/modules/room/models/room.model";
 
 
 type AppAbility = MongoAbility<[Action, Subjects]>;
@@ -27,6 +28,8 @@ export class CaslAbilityFactory {
             cannot(Action.Delete, UserModel, { role: { $in: [Role.ADMIN, Role.SUPER_ADMIN] } });
 
             cannot(Action.Update, UserModel, ['role']);
+
+            can(Action.Manage, RoomModel);
         } else {
             can(Action.Read, UserModel, { id: user.id });
             can(Action.Update, UserModel, { id: user.id });

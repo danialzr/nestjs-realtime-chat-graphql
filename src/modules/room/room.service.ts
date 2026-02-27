@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CreateRoomInput } from './dto/create-room.input';
 import { UpdateRoomInput } from './dto/update-room.input';
 import { PrismaService } from 'src/core/prisma/prisma.service';
@@ -15,9 +15,19 @@ export class RoomService {
 
   async createRoom(creatorId: string, input: CreateRoomInput): Promise<Room> {
 
-    const uniqueUsers = Array.from(new Set(input.participantIds));
+    const uniqueUsers = Array.from(new Set(input.participantIds || []));
 
     if (uniqueUsers.includes(creatorId)) throw new BadRequestException('You cannot create a room with yourself.');
+
+    if (uniqueUsers.length > 0) {
+      const validUsersCount = await this.prisma.user.count({
+        where: { id: { in: uniqueUsers } }
+      });
+
+      if (validUsersCount !== uniqueUsers.length) {
+        throw new BadRequestException('One or more users do not exist.');
+      }
+    }
 
     //Direct Room
     if (uniqueUsers.length === 1) {
@@ -84,7 +94,12 @@ export class RoomService {
         },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 1
+          take: 1,
+          include: {
+            sender: {
+              select: { id: true, name: true }
+            }
+          }
         }
       },
       orderBy: { updatedAt: 'desc' }
@@ -115,23 +130,21 @@ export class RoomService {
           userId,
           roomId
         }
-      }
+      }, include: { room: true }
     });
 
-    if (!member || (member.role !== GroupRole.OWNER && member.role !== GroupRole.ADMIN)) {
-      throw new BadRequestException('you dont have permission to update this room')
+    if (!member) throw new NotFoundException('You are not a member of this room');
+
+    if (member.role !== GroupRole.OWNER && member.role !== GroupRole.ADMIN) {
+      throw new ForbiddenException('You dont have permission to update this room')
     }
 
-    const room = await this.prisma.room.findUnique({ where: { id: roomId } });
-
-    if (!room) throw new BadRequestException('room not found');
-    if (room?.type === RoomType.DIRECT) {
-      throw new BadRequestException('cannot update direct');
+    if (member.room.type === RoomType.DIRECT) {
+      throw new BadRequestException('Cannot update direct chat');
     }
 
     if (updateData.slug) {
-      updateData.slug = updateData.slug.trim();
-      const formattedSlug = `d.dani/${updateData.slug}`;
+      const formattedSlug = `d.dani/${updateData.slug.trim()}`;
 
       const existingSlug = await this.prisma.room.findUnique({
         where: { slug: formattedSlug }
@@ -146,15 +159,19 @@ export class RoomService {
 
     return await this.prisma.room.update({
       where: { id: roomId },
-      data: {
-        ...updateData
-      },
+      data: updateData,
       include: { members: true }
-    })
+    });
   }
 
   async deleteRoom(userId: string, input: RoomIdInput): Promise<boolean> {
-    const { roomId } = input
+    const { roomId } = input;
+
+    const room = await this.prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) throw new NotFoundException('Room not found');
+
+    if (room.type === RoomType.DIRECT) throw new BadRequestException('Direct rooms cannot be deleted');
+
     const member = await this.prisma.roomMember.findUnique({
       where: {
         userId_roomId: {
@@ -175,48 +192,43 @@ export class RoomService {
   }
 
   async addMember(adminId: string, input: MemberInput) {
-    const requester = await this.prisma.roomMember.findUnique({
-      where: {
-        userId_roomId: {
-          userId: adminId,
-          roomId: input.roomId
+    const { roomId, userId } = input;
+
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      include: {
+        members: {
+          where: { userId: { in: [adminId, userId] } }
         }
       }
     });
+
+    if (!room) throw new NotFoundException('Room not found');
+    if (room.type === RoomType.DIRECT) throw new BadRequestException('Cannot add members to a direct room');
+
+    const requester = room.members.find(m => m.userId === adminId);
+    const target = room.members.find(m => m.userId === userId);
+
     if (!requester || (requester.role !== GroupRole.ADMIN && requester.role !== GroupRole.OWNER)) {
-      throw new BadRequestException('You do not have permission to add members');
+      throw new ForbiddenException('You do not have permission to add members');
     }
 
-    const room = await this.prisma.room.findUnique({ where: { id: input.roomId } });
-    if (!room || room.type === RoomType.DIRECT) {
-      throw new BadRequestException('Cannot add members to a direct room Or room not found');
-    }
+    if (target) throw new BadRequestException('This member already exists in the room');
 
-    const isAlreadyMember = await this.prisma.roomMember.findUnique({
-      where: {
-        userId_roomId: { userId: input.userId, roomId: input.roomId }
-      }
-    });
-    if (isAlreadyMember) throw new BadRequestException('this memmber already exist');
-
-    await this.prisma.roomMember.create({
+    return await this.prisma.roomMember.create({
       data: {
-        userId: input.userId,
-        roomId: input.roomId,
+        userId,
+        roomId,
         role: GroupRole.MEMBER
-      }
-    });
-
-    return await this.prisma.room.findUnique({
-      where: { id: input.roomId },
+      },
       include: {
-        members: {
+        room: {
           include: {
-            user: true
+            members: { include: { user: true } }
           }
         }
       }
-    });
+    }).then(m => m.room);
   }
 
   async joinBySlug(userId: string, input: JoinBySlugInput) {
@@ -225,42 +237,42 @@ export class RoomService {
     const room = await this.prisma.room.findUnique({
       where: { slug },
       include: {
-        members: true,
+        members: {
+          where: { userId }
+        },
       },
     });
-    if (!room) throw new NotFoundException('Room not found');
 
+    if (!room) throw new NotFoundException('Room not found');
     if (room.type === RoomType.DIRECT) throw new BadRequestException('Cannot join a direct room');
 
-    const isAlreadyMember = room.members.some((m) => m.userId === userId);
-    if (isAlreadyMember) throw new BadRequestException('You are already a member of this room');
+    if (room.members.length > 0) {
+      throw new BadRequestException('You are already a member of this room');
+    }
 
-    await this.prisma.roomMember.create({
+    const newMember = await this.prisma.roomMember.create({
       data: {
         userId,
         roomId: room.id,
         role: GroupRole.MEMBER,
       },
+      include: {
+        room: {
+          include: {
+            members: {
+              include: {
+                user: { select: { id: true, name: true } }
+              }
+            },
+            _count: {
+              select: { messages: true, members: true }
+            }
+          }
+        }
+      }
     });
 
-    return await this.prisma.room.findUnique({
-      where: { id: room.id },
-      include: {
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-        _count: {
-          select: { messages: true, members: true },
-        },
-      },
-    });
+    return newMember.room;
   }
 
   async removeMember(adminId: string, input: MemberInput) {
@@ -276,23 +288,23 @@ export class RoomService {
       })
     ]);
 
-    if (!requester) throw new BadRequestException('You are not a member of this room');
-    if (!targetMember) throw new BadRequestException('User is not a member of this room');
+    if (!requester) throw new ForbiddenException('You are not a member of this room');
+    if (!targetMember) throw new NotFoundException('User is not a member of this room');
 
     if (requester.room.type === RoomType.DIRECT) {
       throw new BadRequestException('Cannot remove members from a direct room');
     }
 
     if (requester.role === GroupRole.MEMBER) {
-      throw new BadRequestException('You do not have permission to remove members');
+      throw new ForbiddenException('You do not have permission to remove members');
     }
 
     if (targetMember.role === GroupRole.OWNER) {
-      throw new BadRequestException('Cannot remove the room owner');
+      throw new ForbiddenException('Cannot remove the room owner');
     }
 
     if (requester.role === GroupRole.ADMIN && targetMember.role === GroupRole.ADMIN) {
-      throw new BadRequestException('Admins cannot remove other admins');
+      throw new ForbiddenException('Admins cannot remove other admins');
     }
 
     if (adminId === userId) {
@@ -310,88 +322,109 @@ export class RoomService {
     });
   }
 
-  async leaveRoom(userId: string, input: RoomIdInput) {
+  async leaveRoom(userId: string, input: RoomIdInput): Promise<boolean> {
     const { roomId } = input;
 
-    const member = await this.prisma.roomMember.findUnique({
-      where: {
-        userId_roomId: { userId, roomId }
-      }
-    });
-    if (!member) throw new BadRequestException('You are not a member of this room');
-
-    const allMembers = await this.prisma.roomMember.findMany({
-      where: { roomId },
-      orderBy: { createdAt: 'asc' },
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      include: { members: true }
     });
 
-    if (allMembers.length === 1) {
+    if (!room) throw new NotFoundException('Room not found');
+
+    const member = room.members.find(m => m.userId === userId);
+    if (!member) throw new ForbiddenException('You are not a member of this room');
+
+    if (room.type === RoomType.DIRECT) {
+      throw new BadRequestException('You cannot leave a direct chat. Use delete room instead.');
+    }
+
+    if (room.members.length === 1) {
       await this.prisma.room.delete({ where: { id: roomId } });
-      return { message: 'room deleted beacause not hav member' };
+      return true;
     }
 
     if (member.role === GroupRole.OWNER) {
       const successor =
-        allMembers.find(m => m.userId !== userId && m.role === GroupRole.ADMIN) ||
-        allMembers.find(m => m.userId !== userId);
+        room.members.find(m => m.userId !== userId && m.role === GroupRole.ADMIN) ||
+        room.members.find(m => m.userId !== userId);
 
-      if (successor) {
-        await this.prisma.roomMember.update({
+      if (!successor) {
+        throw new InternalServerErrorException('Could not find a successor for the owner');
+      }
+
+      await this.prisma.$transaction([
+        this.prisma.roomMember.update({
           where: { id: successor.id },
           data: { role: GroupRole.OWNER }
-        });
-      }
+        }),
+        this.prisma.roomMember.delete({
+          where: { userId_roomId: { userId, roomId } }
+        })
+      ]);
+    } else {
+      await this.prisma.roomMember.delete({
+        where: { userId_roomId: { userId, roomId } }
+      });
     }
 
-    await this.prisma.roomMember.delete({
-      where: { id: member.id }
-    });
-
-    return { message: 'leaved successsfully' };
+    return true;
   }
 
   async changeMemberRole(adminId: string, input: ChangeRoleInput) {
     const { roomId, targetId, newRole } = input;
 
-    const [requester, target] = await Promise.all([
-      this.prisma.roomMember.findUnique({
-        where: { userId_roomId: { userId: adminId, roomId } }
-      }),
-      this.prisma.roomMember.findUnique({
-        where: { userId_roomId: { userId: targetId, roomId } }
-      })
-    ]);
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      include: {
+        members: {
+          where: { userId: { in: [adminId, targetId] } }
+        }
+      }
+    });
 
-    if (!requester) throw new BadRequestException('You are not a member of this room');
-    if (!target) throw new BadRequestException('Target user is not a member of this room');
+    if (!room) throw new NotFoundException('Room not found');
+    if (room.type === RoomType.DIRECT) throw new BadRequestException('Cannot change roles in direct chat');
+
+    const requester = room.members.find(m => m.userId === adminId);
+    const target = room.members.find(m => m.userId === targetId);
+
+    if (!requester) throw new ForbiddenException('You are not a member of this room');
+    if (!target) throw new NotFoundException('Target user is not a member');
 
     if (requester.role !== GroupRole.OWNER && requester.role !== GroupRole.ADMIN) {
-      throw new BadRequestException('You do not have permission to change roles');
+      throw new ForbiddenException('You do not have permission to change roles');
     }
 
     if (newRole === GroupRole.OWNER && requester.role !== GroupRole.OWNER) {
-      throw new BadRequestException('Only the current owner can transfer ownership');
+      throw new ForbiddenException('Only the current owner can transfer ownership');
     }
 
     if (requester.role === GroupRole.ADMIN && target.role === GroupRole.ADMIN && adminId !== targetId) {
-      throw new BadRequestException('Admins cannot change each others roles');
+      throw new ForbiddenException('Admins cannot change each others roles');
     }
 
     if (target.role === GroupRole.OWNER && newRole !== GroupRole.OWNER) {
-      throw new BadRequestException('Cannot demote the owner. Transfer ownership first');
+      throw new BadRequestException('Cannot demote the owner directly');
     }
 
     if (newRole === GroupRole.OWNER) {
+      await this.prisma.$transaction([
+        this.prisma.roomMember.update({
+          where: { id: requester.id },
+          data: { role: GroupRole.ADMIN }
+        }),
+        this.prisma.roomMember.update({
+          where: { id: target.id },
+          data: { role: GroupRole.OWNER }
+        })
+      ]);
+    } else {
       await this.prisma.roomMember.update({
-        where: { id: requester.id },
-        data: { role: GroupRole.ADMIN }
+        where: { id: target.id },
+        data: { role: newRole }
       });
     }
-
-    await this.prisma.roomMember.update({
-      where: { id: target.id },
-      data: { role: newRole }
-    });
 
     return await this.prisma.room.findUnique({
       where: { id: roomId },

@@ -3,11 +3,11 @@ import { IsOptional, IsString, Length } from "class-validator";
 
 @InputType()
 export class CreateRoomInput {
-    @Field({ nullable: true })
+    @Field()
     @IsOptional()
     @IsString()
     @Length(3, 50)
-    name?: string;
+    name: string;
 
     @Field({ nullable: true })
     @IsOptional()

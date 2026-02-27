@@ -18,7 +18,6 @@ export class UserResolver {
     nullable: true
   })
   async getMe(@GetUser('id') userId: string) {
-    console.log(userId)
     return await this.userService.getMe(userId)
   }
 

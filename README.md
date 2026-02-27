@@ -30,7 +30,10 @@ The codebase is strictly organized into **Domain-Driven Modules** (Users, Messag
 
 ## 🚀 Getting Started
 
-1. **Clone & Install:**
-   ```bash
-   git clone (https://github.com/danialzr/nestjs-realtime-chat-graphql)
-   npm install
+**Clone & Install:**
+
+1. Clone the repo: `git clone (https://github.com/danialzr/nestjs-realtime-chat-graphql)`
+2. Install dependencies: `npm install`
+3. Setup `.env` with your DATABASE_URL and JWT_SECRET.
+4. Run migrations: `npx prisma migrate dev`
+5. Start the server: `npm run start:dev`

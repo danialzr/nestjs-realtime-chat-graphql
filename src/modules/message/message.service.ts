@@ -1,12 +1,17 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateMessageInput } from './dto/create-message.input';
 import { PrismaService } from 'src/core/prisma/prisma.service';
 import { RoomMessageIdInput } from './dto/room-id.input';
 import { EditMessageInput } from './dto/edit-message.input';
+import { ChatGateway } from './message.gateway';
 
 @Injectable()
 export class MessageService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => ChatGateway))
+    private readonly chatGateway: ChatGateway 
+  ) { }
 
   async sendMessage(userId: string, input: CreateMessageInput) {
     const { roomId, content } = input;
@@ -20,10 +25,13 @@ export class MessageService {
         senderId: userId
       },
       include: {
-        room: true,
-        sender: true
+        sender: {
+          select: { id: true, name: true }
+        }
       }
     });
+
+    this.chatGateway.sendMessageToRoom(roomId, 'newMessage', message);
 
     return message
   }
@@ -54,7 +62,7 @@ export class MessageService {
 
     if (message.senderId !== userId) throw new ForbiddenException('You can only edit your own messages');
 
-    return await this.prisma.message.update({
+    const updatedMessage = await this.prisma.message.update({
       where: { id: input.messageId },
       data: { content: input.newContent },
       include: {
@@ -63,6 +71,10 @@ export class MessageService {
         }
       }
     });
+
+    this.chatGateway.sendMessageToRoom(updatedMessage.roomId, 'messageUpdated', updatedMessage);
+
+    return updatedMessage;
   }
 
   async deletemessage(userId, messageId) {
@@ -78,6 +90,9 @@ export class MessageService {
     await this.prisma.message.delete({
       where: { id: messageId }
     });
+
+    this.chatGateway.sendMessageToRoom(message.roomId, 'messageDeleted', { messageId });
+    return true;
   }
 
   private async validateMembership(userId: string, roomId: string) {

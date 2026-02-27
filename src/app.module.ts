@@ -13,6 +13,7 @@ import { ConfigModule } from '@nestjs/config';
 import { CaslModule } from './casl/casl.module';
 import { AbilitiesGuard } from './casl/guards/abilities.guard';
 import { UploadModule } from './upload/upload.module';
+import { RoomModule } from './modules/room/room.module';
 
 @Module({
   imports: [
@@ -29,7 +30,8 @@ import { UploadModule } from './upload/upload.module';
     //Import Modules
     UserModule,
     AuthModule,
-    UploadModule
+    UploadModule,
+    RoomModule
   ],
   controllers: [AppController],
   providers: [

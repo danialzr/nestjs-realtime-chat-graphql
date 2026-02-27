@@ -1,6 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateMessageInput } from './dto/create-message.input';
-import { UpdateMessageInput } from './dto/update-message.input';
 import { PrismaService } from 'src/core/prisma/prisma.service';
 import { RoomMessageIdInput } from './dto/room-id.input';
 import { EditMessageInput } from './dto/edit-message.input';

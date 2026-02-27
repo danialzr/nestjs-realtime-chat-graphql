@@ -35,6 +35,11 @@ input ChangeUserRoleInput {
   targetId: String!
 }
 
+input CreateMessageInput {
+  content: String!
+  roomId: String!
+}
+
 input CreateRoomInput {
   avatar: String
   bio: String
@@ -46,6 +51,11 @@ input CreateRoomInput {
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
 scalar DateTime
+
+input EditMessageInput {
+  messageId: String!
+  newContent: String!
+}
 
 enum GroupRole {
   ADMIN
@@ -62,6 +72,17 @@ input MemberInput {
   userId: String!
 }
 
+type MessageModel {
+  content: String!
+  createdAt: DateTime!
+  id: String!
+  room: RoomModel!
+  roomId: String!
+  sender: UserModel
+  senderId: String
+  updatedAt: DateTime!
+}
+
 type Mutation {
   addMember(input: MemberInput!): RoomModel!
   changeMemberRole(input: ChangeRoleInput!): RoomModel!
@@ -73,13 +94,16 @@ type Mutation {
 
   """Admin only: Changes a specific user role"""
   changeUserRole(input: ChangeUserRoleInput!): UserModel!
+  create(input: CreateMessageInput!): MessageModel!
   createRoom(createRoomInput: CreateRoomInput!): RoomModel!
+  deleteMessage(messageId: String!): Boolean!
   deleteRoom(input: RoomIdInput!): Boolean!
 
   """
   Permits a user to delete their own account or an Admin to remove a specific user.
   """
   deleteUser(id: String!): Boolean!
+  editMessage(input: EditMessageInput!): MessageModel!
   joinBySlug(input: JoinBySlugInput!): RoomModel!
   leaveRoom(input: RoomIdInput!): Boolean!
 
@@ -112,6 +136,7 @@ type Query {
   """get user"""
   getMe: UserModel
   getMyRooms: [RoomModel!]!
+  getRoomMessages(input: RoomMessageIdInput!): [MessageModel!]!
 
   """Health check query"""
   hello: String!
@@ -153,6 +178,10 @@ type RoomMemberModel {
   roomId: String!
   user: UserModel!
   userId: String!
+}
+
+input RoomMessageIdInput {
+  roomId: String!
 }
 
 type RoomModel {
